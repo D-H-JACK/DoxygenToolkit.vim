@@ -486,7 +486,7 @@ function! <SID>DoxygenAuthorFunc()
   exec "normal o".s:interCommentTag.g:DoxygenToolkit_briefTag_pre
   mark d
   exec "normal o".s:interCommentTag.g:DoxygenToolkit_authorTag.g:DoxygenToolkit_authorName
-  exec "normal o".s:interCommentTag.g:DoxygenToolkit_versionTag.g:DoxygenToolkit_versionString
+  " exec "normal o".s:interCommentTag.g:DoxygenToolkit_versionTag.g:DoxygenToolkit_versionString
   let l:date = strftime("%Y-%m-%d")
   exec "normal o".s:interCommentTag.g:DoxygenToolkit_dateTag.l:date
   if ( g:DoxygenToolkit_endCommentTag != "" )
@@ -640,6 +640,7 @@ function! <SID>DoxygenCommentFunc()
     let l:lineBuffer = l:lineBuffer.' '.getline( line( "." ))
     let l:count = l:count + 1
   endwhile
+  
   " Error message when the end of the function(/...) has not been found
   if( l:endDocFound == 0 )
     if( match( l:lineBuffer, l:emptyLinePattern ) != -1 )
@@ -894,8 +895,10 @@ endfunction
 function! s:CheckFileType()
   if( &filetype == "python" )
     let l:fileType       = "python"
-  else
-    let l:fileType       = "cpp"
+  elseif( &filetype == "scala" )
+    let l:fileType       = "scala"
+  else 
+  	let l:fileType 			 = "cpp"
   endif
   return l:fileType
 endfunction
@@ -906,7 +909,6 @@ endfunction
 " - Functions which return pointer to function are not supported.
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! s:ParseFunctionParameters( lineBuffer, doc )
-  "call s:WarnMsg( 'IN__'.a:lineBuffer )
   let l:paramPosition = matchend( a:lineBuffer, 'operator[[:blank:]]*([[:blank:]]*)' )
   if ( l:paramPosition == -1 )
     let l:paramPosition = stridx( a:lineBuffer, '(' )
@@ -962,22 +964,27 @@ function! s:ParseFunctionParameters( lineBuffer, doc )
     endif
   endwhile
 
-  "call s:WarnMsg( "[DEBUG]: ".l:parametersBuffer )
   " Now, work on each parameter.
   let l:params = []
-  let l:index = stridx( l:parametersBuffer, ',' )
-  while( l:index != -1 )
-    let l:paramBuffer = strpart( l:parametersBuffer, 0, l:index )
-    if( s:CountBrackets( l:paramBuffer ) == 0 )
-      let l:params = add( l:params, s:ParseParameter( l:paramBuffer ) )
-      let l:parametersBuffer = strpart( l:parametersBuffer, l:index + 1 )
-      let l:index = stridx( l:parametersBuffer, ',' )
-    else
-      let l:index = stridx( l:parametersBuffer, ',', l:index + 1 )
-    endif
-  endwhile
-  if( strlen( l:parametersBuffer ) != 0 )
-    let l:params = add( l:params, s:ParseParameter( l:parametersBuffer ) )
+  
+  if( s:CheckFileType() == "scala" )
+    let l:params = s:ParseScalaParameters( l:parametersBuffer )
+    let a:doc.returns = 'yes'
+  else
+  	let l:index = stridx( l:parametersBuffer, ',' )
+	  while( l:index != -1 )
+	    let l:paramBuffer = strpart( l:parametersBuffer, 0, l:index )
+	    if( s:CountBrackets( l:paramBuffer ) == 0 )
+	      let l:params = add( l:params, s:ParseParameter( l:paramBuffer ) )
+	      let l:parametersBuffer = strpart( l:parametersBuffer, l:index + 1 )
+	      let l:index = stridx( l:parametersBuffer, ',' )
+	    else
+	      let l:index = stridx( l:parametersBuffer, ',', l:index + 1 )
+	    endif
+	  endwhile
+	  if( strlen( l:parametersBuffer ) != 0 )
+	    let l:params = add( l:params, s:ParseParameter( l:parametersBuffer ) )
+	  endif
   endif
 
   if( s:CheckFileType() == "cpp" )
@@ -994,6 +1001,24 @@ function! s:ParseFunctionParameters( lineBuffer, doc )
   endfor
 endfunction
 
+function! s:ParseScalaParameters( buf )
+  let l:paramBuf = a:buf
+  let l:params = []
+  " find : get J and find befor for , get I 
+  while ( strlen( l:paramBuf ) > 0 )
+    let l:lastIndex = strridx( l:paramBuf, ':')
+    let l:paramBuf = strpart( l:paramBuf, 0, l:lastIndex )
+    let l:startIndex = strridx( l:paramBuf, ',')
+    let l:param = substitute( strpart( l:paramBuf, l:startIndex + 1), "[[:blank:]]*", "", "g" )
+    if ( strlen(l:param) > 0 )
+    	let l:params = add( l:params, l:param )
+    endif
+  endwhile
+  
+  " cut I,J
+  " reserver . filter null . filetype check
+  return reverse(l:params)
+endfunction
 
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 " Parse given parameter and return its name.
@@ -1074,7 +1099,7 @@ endfunction
 " Define start/end documentation format and backup generic parameters.
 """"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
 function! s:InitializeParameters()
-  if( s:CheckFileType() == "cpp" )
+  if( s:CheckFileType() == "cpp" || s:CheckFileType() == "scala")
     let s:startCommentTag   = g:DoxygenToolkit_startCommentTag
     let s:interCommentTag   = g:DoxygenToolkit_interCommentTag
     let s:endCommentTag     = g:DoxygenToolkit_endCommentTag
